@@ -7,38 +7,65 @@
     <link rel="stylesheet" href="../css/styles.css">
     <style>
         .ttt-board {
-            grid-template-columns: repeat(3, 1fr);
-            width: 300px;
-            height: 300px;
+            display: grid;
+            grid-template-columns: repeat(3, 100px);
+            grid-template-rows: repeat(3, 100px);
+            gap: 4px;
+            margin: 1.5rem auto;
+            background: #334155;
+            padding: 8px;
+            border-radius: 12px;
+            width: fit-content;
         }
         .cell {
             background: #1e293b;
+            width: 100px;
+            height: 100px;
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 3.5rem;
+            font-size: 3.2rem;
             font-weight: bold;
             cursor: pointer;
             border-radius: 8px;
             user-select: none;
+            box-sizing: border-box;
         }
         .cell:hover:not(.taken) {
             background: #334155;
         }
         .cell.x { color: #38bdf8; }
         .cell.o { color: #f472b6; }
-        .mode-select { margin: 1rem 0; }
+        .controls {
+            margin: 1rem 0;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+            justify-content: center;
+        }
+        .controls button.active {
+            background: #0ea5e9;
+        }
     </style>
 </head>
 <body>
     <div class="container game-container">
         <a href="../index.html" class="back">← Zurück</a>
         <h1>Tic-Tac-Toe</h1>
-        <p>Reines Skill – gegen Freund oder gegen die KI.</p>
-        <div class="mode-select">
-            <button id="btn-hotseat" onclick="setMode('hotseat')">Hotseat (2 Spieler)</button>
+        <p>Reines Skill – Hotseat oder gegen adaptive KI.</p>
+
+        <div class="controls">
+            <button id="btn-hotseat" class="active" onclick="setMode('hotseat')">Hotseat</button>
             <button id="btn-ai" onclick="setMode('ai')">Gegen KI</button>
         </div>
+
+        <div id="ai-controls" class="controls" style="display:none;">
+            <span style="align-self:center;">Schwierigkeit:</span>
+            <button id="diff-easy" onclick="setDifficulty('easy')">Leicht</button>
+            <button id="diff-medium" class="active" onclick="setDifficulty('medium')">Mittel</button>
+            <button id="diff-hard" onclick="setDifficulty('hard')">Schwer</button>
+        </div>
+
         <div class="status" id="status">Spieler X ist am Zug</div>
         <div class="board ttt-board" id="board"></div>
         <button onclick="resetGame()">Neues Spiel</button>
@@ -47,10 +74,13 @@
     <script>
         const boardEl = document.getElementById('board');
         const statusEl = document.getElementById('status');
+        const aiControls = document.getElementById('ai-controls');
+
         let board = Array(9).fill(null);
         let current = 'X';
         let gameOver = false;
-        let mode = 'hotseat'; // 'hotseat' or 'ai'
+        let mode = 'hotseat';
+        let difficulty = 'medium';
         const human = 'X';
         const ai = 'O';
 
@@ -62,9 +92,17 @@
 
         function setMode(m) {
             mode = m;
-            document.getElementById('btn-hotseat').style.background = m === 'hotseat' ? '#0ea5e9' : '#38bdf8';
-            document.getElementById('btn-ai').style.background = m === 'ai' ? '#0ea5e9' : '#38bdf8';
+            document.getElementById('btn-hotseat').classList.toggle('active', m === 'hotseat');
+            document.getElementById('btn-ai').classList.toggle('active', m === 'ai');
+            aiControls.style.display = m === 'ai' ? 'flex' : 'none';
             resetGame();
+        }
+
+        function setDifficulty(d) {
+            difficulty = d;
+            document.getElementById('diff-easy').classList.toggle('active', d === 'easy');
+            document.getElementById('diff-medium').classList.toggle('active', d === 'medium');
+            document.getElementById('diff-hard').classList.toggle('active', d === 'hard');
         }
 
         function render() {
@@ -84,17 +122,17 @@
 
             board[i] = current;
             if (checkWin(current)) {
-                statusEl.textContent = mode === 'ai' && current === ai ? 'KI gewinnt!' : `Spieler ${current} gewinnt!`;
+                statusEl.textContent = (mode === 'ai' && current === ai) ? 'KI gewinnt!' : `Spieler ${current} gewinnt!`;
                 gameOver = true;
-            } else if (board.every(c => c)) {
+            } else if (board.every(c => c !== null)) {
                 statusEl.textContent = 'Unentschieden!';
                 gameOver = true;
             } else {
                 current = current === 'X' ? 'O' : 'X';
-                statusEl.textContent = mode === 'ai' && current === ai ? 'KI denkt...' : `Spieler ${current} ist am Zug`;
+                statusEl.textContent = (mode === 'ai' && current === ai) ? 'KI denkt...' : `Spieler ${current} ist am Zug`;
                 render();
                 if (mode === 'ai' && current === ai && !gameOver) {
-                    setTimeout(aiMove, 400);
+                    setTimeout(aiMove, 350);
                 }
                 return;
             }
@@ -102,13 +140,13 @@
         }
 
         function aiMove() {
-            const move = minimax(board, ai).index;
-            if (move !== undefined) {
+            const move = chooseAiMove();
+            if (move !== null && board[move] === null) {
                 board[move] = ai;
                 if (checkWin(ai)) {
                     statusEl.textContent = 'KI gewinnt!';
                     gameOver = true;
-                } else if (board.every(c => c)) {
+                } else if (board.every(c => c !== null)) {
                     statusEl.textContent = 'Unentschieden!';
                     gameOver = true;
                 } else {
@@ -117,6 +155,27 @@
                 }
                 render();
             }
+        }
+
+        function chooseAiMove() {
+            const perfect = minimax(board.slice(), ai).index;
+            const avail = board.map((v, i) => v === null ? i : null).filter(v => v !== null);
+            if (avail.length === 0) return null;
+
+            // Fehlerwahrscheinlichkeit je nach Schwierigkeit
+            let mistakeChance = 0;
+            if (difficulty === 'easy') mistakeChance = 0.55;
+            else if (difficulty === 'medium') mistakeChance = 0.25;
+            else if (difficulty === 'hard') mistakeChance = 0.08;
+
+            if (Math.random() < mistakeChance) {
+                // Suboptimalen Zug wählen (nicht den besten)
+                const others = avail.filter(i => i !== perfect);
+                if (others.length > 0) {
+                    return others[Math.floor(Math.random() * others.length)];
+                }
+            }
+            return perfect;
         }
 
         function minimax(newBoard, player) {
@@ -135,17 +194,11 @@
                 moves.push(move);
             }
 
-            let best;
+            let best = moves[0];
             if (player === ai) {
-                let bestScore = -Infinity;
-                for (const m of moves) {
-                    if (m.score > bestScore) { bestScore = m.score; best = m; }
-                }
+                for (const m of moves) if (m.score > best.score) best = m;
             } else {
-                let bestScore = Infinity;
-                for (const m of moves) {
-                    if (m.score < bestScore) { bestScore = m.score; best = m; }
-                }
+                for (const m of moves) if (m.score < best.score) best = m;
             }
             return best;
         }
@@ -164,6 +217,7 @@
         }
 
         setMode('hotseat');
+        setDifficulty('medium');
     </script>
 </body>
 </html>
