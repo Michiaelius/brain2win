@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tic-Tac-Toe – Brain2Win</title>
+    <link rel="stylesheet" href="../css/styles.css">
+    <style>
+        .ttt-board {
+            grid-template-columns: repeat(3, 1fr);
+            width: 300px;
+            height: 300px;
+        }
+        .cell {
+            background: #1e293b;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 3.5rem;
+            font-weight: bold;
+            cursor: pointer;
+            border-radius: 8px;
+            user-select: none;
+        }
+        .cell:hover:not(.taken) {
+            background: #334155;
+        }
+        .cell.x { color: #38bdf8; }
+        .cell.o { color: #f472b6; }
+    </style>
+</head>
+<body>
+    <div class="container game-container">
+        <a href="../index.html" class="back">← Zurück</a>
+        <h1>Tic-Tac-Toe</h1>
+        <p>Zwei Spieler – reines Skill. Kein Glück, keine Käufe.</p>
+        <div class="status" id="status">Spieler X ist am Zug</div>
+        <div class="board ttt-board" id="board"></div>
+        <button onclick="resetGame()">Neues Spiel</button>
+    </div>
+
+    <script>
+        const boardEl = document.getElementById('board');
+        const statusEl = document.getElementById('status');
+        let board = Array(9).fill(null);
+        let current = 'X';
+        let gameOver = false;
+
+        const wins = [
+            [0,1,2],[3,4,5],[6,7,8],
+            [0,3,6],[1,4,7],[2,5,8],
+            [0,4,8],[2,4,6]
+        ];
+
+        function render() {
+            boardEl.innerHTML = '';
+            board.forEach((val, i) => {
+                const cell = document.createElement('div');
+                cell.className = 'cell' + (val ? ' taken ' + val.toLowerCase() : '');
+                cell.textContent = val || '';
+                cell.onclick = () => makeMove(i);
+                boardEl.appendChild(cell);
+            });
+        }
+
+        function makeMove(i) {
+            if (gameOver || board[i]) return;
+            board[i] = current;
+            if (checkWin(current)) {
+                statusEl.textContent = `Spieler ${current} gewinnt!`;
+                gameOver = true;
+            } else if (board.every(c => c)) {
+                statusEl.textContent = 'Unentschieden!';
+                gameOver = true;
+            } else {
+                current = current === 'X' ? 'O' : 'X';
+                statusEl.textContent = `Spieler ${current} ist am Zug`;
+            }
+            render();
+        }
+
+        function checkWin(player) {
+            return wins.some(combo => combo.every(i => board[i] === player));
+        }
+
+        function resetGame() {
+            board = Array(9).fill(null);
+            current = 'X';
+            gameOver = false;
+            statusEl.textContent = 'Spieler X ist am Zug';
+            render();
+        }
+
+        render();
+    </script>
+</body>
+</html>
