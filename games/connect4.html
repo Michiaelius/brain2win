@@ -23,19 +23,18 @@
         }
         .cell.red { background: #ef4444; }
         .cell.yellow { background: #eab308; }
-        .col-click {
-            cursor: pointer;
-        }
-        .col-click:hover .cell:not(.red):not(.yellow) {
-            background: #334155;
-        }
+        .mode-select { margin: 1rem 0; }
     </style>
 </head>
 <body>
     <div class="container game-container">
         <a href="../index.html" class="back">← Zurück</a>
         <h1>4 Gewinnt</h1>
-        <p>Connect Four – Strategie und Vorausschau. Hotseat für zwei Spieler.</p>
+        <p>Connect Four – Strategie und Vorausschau.</p>
+        <div class="mode-select">
+            <button id="btn-hotseat" onclick="setMode('hotseat')">Hotseat (2 Spieler)</button>
+            <button id="btn-ai" onclick="setMode('ai')">Gegen KI</button>
+        </div>
         <div class="status" id="status">Rot ist am Zug</div>
         <div class="board c4-board" id="board"></div>
         <button onclick="resetGame()">Neues Spiel</button>
@@ -48,6 +47,16 @@
         let board = Array.from({length: ROWS}, () => Array(COLS).fill(null));
         let current = 'red';
         let gameOver = false;
+        let mode = 'hotseat';
+        const human = 'red';
+        const ai = 'yellow';
+
+        function setMode(m) {
+            mode = m;
+            document.getElementById('btn-hotseat').style.background = m === 'hotseat' ? '#0ea5e9' : '#38bdf8';
+            document.getElementById('btn-ai').style.background = m === 'ai' ? '#0ea5e9' : '#38bdf8';
+            resetGame();
+        }
 
         function render() {
             boardEl.innerHTML = '';
@@ -56,7 +65,6 @@
                     const cell = document.createElement('div');
                     cell.className = 'cell';
                     if (board[r][c]) cell.classList.add(board[r][c]);
-                    cell.dataset.col = c;
                     cell.onclick = () => drop(c);
                     boardEl.appendChild(cell);
                 }
@@ -65,23 +73,83 @@
 
         function drop(col) {
             if (gameOver) return;
-            for (let r = ROWS - 1; r >= 0; r--) {
-                if (!board[r][col]) {
-                    board[r][col] = current;
-                    if (checkWin(r, col, current)) {
-                        statusEl.textContent = `${current === 'red' ? 'Rot' : 'Gelb'} gewinnt!`;
-                        gameOver = true;
-                    } else if (board.flat().every(c => c)) {
-                        statusEl.textContent = 'Unentschieden!';
-                        gameOver = true;
-                    } else {
-                        current = current === 'red' ? 'yellow' : 'red';
-                        statusEl.textContent = `${current === 'red' ? 'Rot' : 'Gelb'} ist am Zug`;
-                    }
-                    render();
-                    return;
+            if (mode === 'ai' && current !== human) return;
+            const row = getDropRow(col);
+            if (row === -1) return;
+
+            board[row][col] = current;
+            if (checkWin(row, col, current)) {
+                statusEl.textContent = mode === 'ai' && current === ai ? 'KI gewinnt!' : `${current === 'red' ? 'Rot' : 'Gelb'} gewinnt!`;
+                gameOver = true;
+            } else if (isFull()) {
+                statusEl.textContent = 'Unentschieden!';
+                gameOver = true;
+            } else {
+                current = current === 'red' ? 'yellow' : 'red';
+                statusEl.textContent = mode === 'ai' && current === ai ? 'KI denkt...' : `${current === 'red' ? 'Rot' : 'Gelb'} ist am Zug`;
+                render();
+                if (mode === 'ai' && current === ai && !gameOver) {
+                    setTimeout(aiMove, 500);
                 }
+                return;
             }
+            render();
+        }
+
+        function getDropRow(col) {
+            for (let r = ROWS - 1; r >= 0; r--) {
+                if (!board[r][col]) return r;
+            }
+            return -1;
+        }
+
+        function isFull() {
+            return board.flat().every(c => c);
+        }
+
+        function aiMove() {
+            const col = bestMove();
+            if (col !== -1) {
+                const row = getDropRow(col);
+                board[row][col] = ai;
+                if (checkWin(row, col, ai)) {
+                    statusEl.textContent = 'KI gewinnt!';
+                    gameOver = true;
+                } else if (isFull()) {
+                    statusEl.textContent = 'Unentschieden!';
+                    gameOver = true;
+                } else {
+                    current = human;
+                    statusEl.textContent = 'Dein Zug (Rot)';
+                }
+                render();
+            }
+        }
+
+        // Einfache, aber solide Heuristik: gewinnen > blocken > Mitte bevorzugen
+        function bestMove() {
+            // 1. Kann die KI gewinnen?
+            for (let c = 0; c < COLS; c++) {
+                const r = getDropRow(c);
+                if (r === -1) continue;
+                board[r][c] = ai;
+                if (checkWin(r, c, ai)) { board[r][c] = null; return c; }
+                board[r][c] = null;
+            }
+            // 2. Muss die KI blocken?
+            for (let c = 0; c < COLS; c++) {
+                const r = getDropRow(c);
+                if (r === -1) continue;
+                board[r][c] = human;
+                if (checkWin(r, c, human)) { board[r][c] = null; return c; }
+                board[r][c] = null;
+            }
+            // 3. Bevorzuge Mitte
+            const preference = [3, 2, 4, 1, 5, 0, 6];
+            for (const c of preference) {
+                if (getDropRow(c) !== -1) return c;
+            }
+            return -1;
         }
 
         function checkWin(row, col, player) {
@@ -105,11 +173,11 @@
             board = Array.from({length: ROWS}, () => Array(COLS).fill(null));
             current = 'red';
             gameOver = false;
-            statusEl.textContent = 'Rot ist am Zug';
+            statusEl.textContent = mode === 'ai' ? 'Dein Zug (Rot)' : 'Rot ist am Zug';
             render();
         }
 
-        render();
+        setMode('hotseat');
     </script>
 </body>
 </html>

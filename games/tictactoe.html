@@ -27,13 +27,18 @@
         }
         .cell.x { color: #38bdf8; }
         .cell.o { color: #f472b6; }
+        .mode-select { margin: 1rem 0; }
     </style>
 </head>
 <body>
     <div class="container game-container">
         <a href="../index.html" class="back">← Zurück</a>
         <h1>Tic-Tac-Toe</h1>
-        <p>Zwei Spieler – reines Skill. Kein Glück, keine Käufe.</p>
+        <p>Reines Skill – gegen Freund oder gegen die KI.</p>
+        <div class="mode-select">
+            <button id="btn-hotseat" onclick="setMode('hotseat')">Hotseat (2 Spieler)</button>
+            <button id="btn-ai" onclick="setMode('ai')">Gegen KI</button>
+        </div>
         <div class="status" id="status">Spieler X ist am Zug</div>
         <div class="board ttt-board" id="board"></div>
         <button onclick="resetGame()">Neues Spiel</button>
@@ -45,12 +50,22 @@
         let board = Array(9).fill(null);
         let current = 'X';
         let gameOver = false;
+        let mode = 'hotseat'; // 'hotseat' or 'ai'
+        const human = 'X';
+        const ai = 'O';
 
         const wins = [
             [0,1,2],[3,4,5],[6,7,8],
             [0,3,6],[1,4,7],[2,5,8],
             [0,4,8],[2,4,6]
         ];
+
+        function setMode(m) {
+            mode = m;
+            document.getElementById('btn-hotseat').style.background = m === 'hotseat' ? '#0ea5e9' : '#38bdf8';
+            document.getElementById('btn-ai').style.background = m === 'ai' ? '#0ea5e9' : '#38bdf8';
+            resetGame();
+        }
 
         function render() {
             boardEl.innerHTML = '';
@@ -65,33 +80,90 @@
 
         function makeMove(i) {
             if (gameOver || board[i]) return;
+            if (mode === 'ai' && current !== human) return;
+
             board[i] = current;
             if (checkWin(current)) {
-                statusEl.textContent = `Spieler ${current} gewinnt!`;
+                statusEl.textContent = mode === 'ai' && current === ai ? 'KI gewinnt!' : `Spieler ${current} gewinnt!`;
                 gameOver = true;
             } else if (board.every(c => c)) {
                 statusEl.textContent = 'Unentschieden!';
                 gameOver = true;
             } else {
                 current = current === 'X' ? 'O' : 'X';
-                statusEl.textContent = `Spieler ${current} ist am Zug`;
+                statusEl.textContent = mode === 'ai' && current === ai ? 'KI denkt...' : `Spieler ${current} ist am Zug`;
+                render();
+                if (mode === 'ai' && current === ai && !gameOver) {
+                    setTimeout(aiMove, 400);
+                }
+                return;
             }
             render();
         }
 
-        function checkWin(player) {
-            return wins.some(combo => combo.every(i => board[i] === player));
+        function aiMove() {
+            const move = minimax(board, ai).index;
+            if (move !== undefined) {
+                board[move] = ai;
+                if (checkWin(ai)) {
+                    statusEl.textContent = 'KI gewinnt!';
+                    gameOver = true;
+                } else if (board.every(c => c)) {
+                    statusEl.textContent = 'Unentschieden!';
+                    gameOver = true;
+                } else {
+                    current = human;
+                    statusEl.textContent = 'Dein Zug (X)';
+                }
+                render();
+            }
+        }
+
+        function minimax(newBoard, player) {
+            const avail = newBoard.map((v, i) => v === null ? i : null).filter(v => v !== null);
+            if (checkWinOn(newBoard, human)) return { score: -10 };
+            if (checkWinOn(newBoard, ai)) return { score: 10 };
+            if (avail.length === 0) return { score: 0 };
+
+            const moves = [];
+            for (const i of avail) {
+                const move = { index: i };
+                newBoard[i] = player;
+                const result = minimax(newBoard, player === ai ? human : ai);
+                move.score = result.score;
+                newBoard[i] = null;
+                moves.push(move);
+            }
+
+            let best;
+            if (player === ai) {
+                let bestScore = -Infinity;
+                for (const m of moves) {
+                    if (m.score > bestScore) { bestScore = m.score; best = m; }
+                }
+            } else {
+                let bestScore = Infinity;
+                for (const m of moves) {
+                    if (m.score < bestScore) { bestScore = m.score; best = m; }
+                }
+            }
+            return best;
+        }
+
+        function checkWin(player) { return checkWinOn(board, player); }
+        function checkWinOn(b, player) {
+            return wins.some(combo => combo.every(i => b[i] === player));
         }
 
         function resetGame() {
             board = Array(9).fill(null);
             current = 'X';
             gameOver = false;
-            statusEl.textContent = 'Spieler X ist am Zug';
+            statusEl.textContent = mode === 'ai' ? 'Dein Zug (X)' : 'Spieler X ist am Zug';
             render();
         }
 
-        render();
+        setMode('hotseat');
     </script>
 </body>
 </html>
