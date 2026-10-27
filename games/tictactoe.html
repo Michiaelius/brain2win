@@ -288,8 +288,8 @@
 
         function makeMove(i) {
             if (directRestart && gameOver && (mode === 'local' || mode === 'ai')) {
-                // Direkter Restart durch Klick
-                startNewGameFromClick();
+                // Direkter Restart durch Klick auf konkretes Feld
+                startNewGameFromClick(i);
                 return;
             }
 
@@ -320,7 +320,7 @@
             render();
         }
 
-        function startNewGameFromClick() {
+        function startNewGameFromClick(clickedIndex) {
             board = Array(9).fill(null);
             current = startingPlayer;
             gameOver = false;
@@ -328,15 +328,33 @@
             waitingForHumanFirstMove = false;
 
             if (mode === 'ai' && current === ai) {
+                // KI beginnt: setzt sofort ihren Zug, Feld bleibt faded
                 boardEl.classList.add('faded');
                 waitingForHumanFirstMove = true;
                 statusEl.textContent = 'KI beginnt...';
                 render();
-                setTimeout(aiMove, 400);
+                setTimeout(() => {
+                    aiMove();
+                    // Nach KI-Zug ist es human's turn, faded bleibt bis Spieler klickt
+                }, 300);
             } else {
+                // Mensch beginnt: platziere direkt den Klick
                 boardEl.classList.remove('faded');
-                statusEl.textContent = `${current} beginnt`;
+                if (clickedIndex !== undefined && board[clickedIndex] === null) {
+                    board[clickedIndex] = current;
+                    current = current === 'X' ? 'O' : 'X';
+                    statusEl.textContent = `${current} ist am Zug`;
+                    // Prüfe auf sofortigen Gewinn (unwahrscheinlich im ersten Zug)
+                    if (checkWin(startingPlayer)) {
+                        showEnd(`${startingPlayer} gewinnt!`, startingPlayer);
+                    }
+                } else {
+                    statusEl.textContent = `${current} beginnt`;
+                }
                 render();
+                if (mode === 'ai' && current === ai && !gameOver) {
+                    setTimeout(aiMove, 400);
+                }
             }
         }
 
