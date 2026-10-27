@@ -17,7 +17,9 @@
             border-radius: 14px;
             margin: 1.2rem 0;
             position: relative;
+            transition: opacity 0.3s;
         }
+        .ttt-board.faded { opacity: 0.28; }
         .cell {
             width: 110px;
             height: 110px;
@@ -158,6 +160,7 @@
 
         <div class="controls">
             <button onclick="resetGame()">Neues Spiel</button>
+            <button id="btn-direct" onclick="toggleDirectRestart()">Direkter Restart: Aus</button>
             <button onclick="resetScore()" style="background:#475569;">Score zurücksetzen</button>
         </div>
     </div>
@@ -172,6 +175,7 @@
         const scoreDrawEl = document.getElementById('score-draw');
         const labelX = document.getElementById('label-x');
         const labelO = document.getElementById('label-o');
+        const btnDirect = document.getElementById('btn-direct');
 
         let board = Array(9).fill(null);
         let current = 'X';
@@ -179,17 +183,29 @@
         let mode = 'local';
         let difficulty = 'adaptive';
         let startingPlayer = 'X';
+        let directRestart = false;
+        let waitingForHumanFirstMove = false;
         const human = 'X';
         const ai = 'O';
 
         let score = { x: 0, o: 0, draw: 0 };
-        let adaptiveStrength = 0.35; // startet etwas schwächer
+        let adaptiveStrength = 0.35;
 
         const wins = [
             [0,1,2],[3,4,5],[6,7,8],
             [0,3,6],[1,4,7],[2,5,8],
             [0,4,8],[2,4,6]
         ];
+
+        function toggleDirectRestart() {
+            directRestart = !directRestart;
+            btnDirect.textContent = directRestart ? 'Direkter Restart: An' : 'Direkter Restart: Aus';
+            btnDirect.classList.toggle('active', directRestart);
+            if (!directRestart) {
+                boardEl.classList.remove('faded');
+                overlay.classList.remove('show');
+            }
+        }
 
         function setMode(m) {
             mode = m;
@@ -244,11 +260,6 @@
         }
 
         function showEnd(text, winner) {
-            overlay.textContent = text;
-            overlay.classList.add('show');
-            boardEl.classList.add('win-anim');
-            setTimeout(() => boardEl.classList.remove('win-anim'), 400);
-
             if (winner === 'X') score.x++;
             else if (winner === 'O') score.o++;
             else score.draw++;
@@ -260,20 +271,43 @@
             }
 
             startingPlayer = startingPlayer === 'X' ? 'O' : 'X';
+
+            if (directRestart && (mode === 'local' || mode === 'ai')) {
+                overlay.classList.remove('show');
+                boardEl.classList.add('faded');
+                statusEl.textContent = 'Klicke auf ein Feld für neues Spiel';
+                gameOver = true;
+            } else {
+                overlay.textContent = text;
+                overlay.classList.add('show');
+                boardEl.classList.add('win-anim');
+                setTimeout(() => boardEl.classList.remove('win-anim'), 400);
+                gameOver = true;
+            }
         }
 
         function makeMove(i) {
+            if (directRestart && gameOver && (mode === 'local' || mode === 'ai')) {
+                // Direkter Restart durch Klick
+                startNewGameFromClick();
+                return;
+            }
+
             if (gameOver || board[i] !== null) return;
             if (mode === 'ai' && current !== human) return;
             if (mode === 'online') return;
 
+            // Erster Zug des Spielers nach KI-Start im Direct-Modus
+            if (waitingForHumanFirstMove) {
+                waitingForHumanFirstMove = false;
+                boardEl.classList.remove('faded');
+            }
+
             board[i] = current;
             if (checkWin(current)) {
                 showEnd(`${current} gewinnt!`, current);
-                gameOver = true;
             } else if (board.every(c => c !== null)) {
                 showEnd('Unentschieden!', null);
-                gameOver = true;
             } else {
                 current = current === 'X' ? 'O' : 'X';
                 statusEl.textContent = (mode === 'ai' && current === ai) ? 'KI denkt...' : `${current} ist am Zug`;
@@ -286,43 +320,62 @@
             render();
         }
 
+        function startNewGameFromClick() {
+            board = Array(9).fill(null);
+            current = startingPlayer;
+            gameOver = false;
+            overlay.classList.remove('show');
+            waitingForHumanFirstMove = false;
+
+            if (mode === 'ai' && current === ai) {
+                boardEl.classList.add('faded');
+                waitingForHumanFirstMove = true;
+                statusEl.textContent = 'KI beginnt...';
+                render();
+                setTimeout(aiMove, 400);
+            } else {
+                boardEl.classList.remove('faded');
+                statusEl.textContent = `${current} beginnt`;
+                render();
+            }
+        }
+
         function aiMove() {
             const move = chooseAiMove();
             if (move !== null && board[move] === null) {
                 board[move] = ai;
                 if (checkWin(ai)) {
                     showEnd('KI gewinnt!', ai);
-                    gameOver = true;
                 } else if (board.every(c => c !== null)) {
                     showEnd('Unentschieden!', null);
-                    gameOver = true;
                 } else {
                     current = human;
                     statusEl.textContent = 'Dein Zug (X)';
+                    if (waitingForHumanFirstMove) {
+                        // bleibt faded bis Spieler zieht
+                    } else {
+                        boardEl.classList.remove('faded');
+                    }
                 }
                 render();
             }
         }
 
-        // Bessere Zugwahl: immer gewinnen/blocken, Fehler nur bei nicht-kritischen Zügen
         function chooseAiMove() {
             const avail = board.map((v, i) => v === null ? i : null).filter(v => v !== null);
             if (!avail.length) return null;
 
-            // 1. Kann die KI sofort gewinnen?
             for (const i of avail) {
                 board[i] = ai;
                 if (checkWin(ai)) { board[i] = null; return i; }
                 board[i] = null;
             }
-            // 2. Muss die KI blocken?
             for (const i of avail) {
                 board[i] = human;
                 if (checkWin(human)) { board[i] = null; return i; }
                 board[i] = null;
             }
 
-            // 3. Sonst optimaler Zug (minimax), mit Fehlerchance nur hier
             const perfect = minimax([...board], ai).index;
             let mistakeChance = 0.25;
             if (difficulty === 'easy') mistakeChance = 0.55;
@@ -370,6 +423,8 @@
             current = startingPlayer;
             gameOver = false;
             overlay.classList.remove('show');
+            boardEl.classList.remove('faded');
+            waitingForHumanFirstMove = false;
             statusEl.textContent = mode === 'ai' && current === ai ? 'KI beginnt...' : `${current} beginnt`;
             render();
             if (mode === 'ai' && current === ai) {
